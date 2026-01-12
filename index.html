@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Backlog Tracker Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-sub: #a0a0a0;
+            
+            --accent-phy: #e53935;
+            --accent-chem: #ffb300;
+            --accent-math: #1e88e5;
+            
+            --success: #66bb6a;
+            --danger: #ef5350;
+            --warning: #ff9800;
+            --border: #333;
+            --trend: #00bcd4; /* Cyan for Moving Avg */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1024px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        h1, h2, h3 { margin-top: 0; font-weight: 500; letter-spacing: -0.5px; }
+        h3 { font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
+
+        /* Header */
+        .header-section {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #181818;
+            border-bottom: 2px solid #333;
+            min-height: 80px;
+        }
+        
+        .header-stats { display: flex; gap: 30px; align-items: center; }
+        .timer-display, .streak-display { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .timer-label { font-size: 0.75rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Summary Dashboard */
+        .summary-dashboard {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        @media (max-width: 600px) {
+            .summary-dashboard { grid-template-columns: repeat(2, 1fr); }
+        }
+        .summary-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #252525; padding: 15px; border-radius: 8px; border: 1px solid #333;
+        }
+        .summary-num { font-size: 1.8rem; font-weight: 800; }
+        .summary-tag { font-size: 0.75rem; color: var(--text-sub); margin-top: 4px; text-transform: uppercase; }
+        
+        .text-phy { color: var(--accent-phy); }
+        .text-chem { color: var(--accent-chem); }
+        .text-math { color: var(--accent-math); }
+        .text-total { color: #fff; }
+
+        /* Setup Controls */
+        #setupControls { display: flex; gap: 10px; align-items: center; }
+        input.days-input {
+            width: 80px; padding: 10px; background: #2c2c2c; border: 1px solid #444;
+            color: white; border-radius: 6px; font-size: 1rem; text-align: center; font-weight: bold;
+        }
+        input.days-input:focus { border-color: var(--success); outline: none; }
+        button#startBtn {
+            background: var(--text-main); color: var(--bg-color); border: none;
+            padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer;
+        }
+        button.reset-btn {
+            background: transparent; color: var(--danger); border: 1px solid var(--border);
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+            margin-left: auto; transition: 0.2s;
+        }
+        button.reset-btn:hover { border-color: var(--danger); background: rgba(239, 83, 80, 0.1); }
+        .hidden { display: none !important; }
+
+        /* Input Section */
+        .input-section {
+            grid-column: 1 / -1;
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: end;
+        }
+        .form-group { flex: 1; min-width: 150px; }
+        label { display: block; margin-bottom: 8px; color: var(--text-sub); font-size: 0.8rem; }
+        select, input.main-input {
+            width: 100%; padding: 12px; background: #121212; border: 1px solid var(--border);
+            color: white; border-radius: 6px; font-size: 1rem; box-sizing: border-box; outline: none;
+        }
+        button.add-btn {
+            background: var(--text-main); color: var(--bg-color); border: none;
+            padding: 12px 24px; border-radius: 6px; font-weight: 700; cursor: pointer; height: 46px;
+        }
+
+        /* Crisis Card */
+        .crisis-card {
+            grid-column: 1 / -1;
+            border: 1px solid var(--warning);
+            background: rgba(255, 152, 0, 0.05);
+            display: none; 
+        }
+        .crisis-text { color: var(--warning); font-weight: 600; }
+        .crisis-sub { color: var(--text-sub); font-size: 0.9rem; margin-top: 5px; }
+
+        /* Victory Card */
+        .victory-card {
+            grid-column: 1 / -1;
+            border: 1px solid var(--success);
+            background: rgba(102, 187, 106, 0.1);
+            display: none;
+            text-align: center;
+        }
+        .victory-text { color: var(--success); font-weight: 700; font-size: 1.2rem; }
+        .victory-sub { color: var(--text-main); font-size: 1rem; margin-top: 5px; }
+
+        /* Logs */
+        .log-container { max-height: 150px; overflow-y: auto; margin-top: 10px; }
+        .log-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; border-bottom: 1px solid #333; font-size: 0.9rem;
+        }
+        .log-val { font-weight: bold; color: var(--text-main); margin-left: 5px; }
+        .undo-btn {
+            background: transparent; color: var(--danger); border: 1px solid var(--danger);
+            padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; margin-left: 10px;
+        }
+        .undo-btn:hover { background: var(--danger); color: white; }
+
+        /* Stats & Badges */
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-box { background: #181818; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-val { font-size: 1.6rem; font-weight: 700; display: block; margin-bottom: 5px; }
+        .stat-lbl { font-size: 0.75rem; color: var(--text-sub); text-transform: uppercase; }
+        .rate-good { color: var(--success); }
+        .rate-bad { color: var(--danger); }
+
+        .badge-container { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .badge {
+            background: #252525; color: var(--text-main); padding: 6px 14px;
+            border-radius: 20px; font-size: 0.8rem; font-weight: 600; border: 1px solid #444;
+        }
+        .badge-earned { border-color: var(--success); color: var(--success); background: rgba(102, 187, 106, 0.1); }
+
+        /* Completed Chapters */
+        .comp-section { margin-top: 15px; }
+        .comp-header { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px; font-weight: 600; }
+        .comp-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
+        .completed-chip { font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; background: #333; color: #fff; }
+        
+        .chip-phy { border: 1px solid var(--accent-phy); color: var(--accent-phy); background: rgba(229, 57, 53, 0.1); }
+        .chip-chem { border: 1px solid var(--accent-chem); color: var(--accent-chem); background: rgba(255, 179, 0, 0.1); }
+        .chip-math { border: 1px solid var(--accent-math); color: var(--accent-math); background: rgba(30, 136, 229, 0.1); }
+
+        /* Progress Bars */
+        .progress-wrapper { margin-bottom: 15px; }
+        .progress-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem; }
+        .progress-track { background: #333; height: 6px; border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+        .phy-fill { background-color: var(--accent-phy); }
+        .chem-fill { background-color: var(--accent-chem); }
+        .math-fill { background-color: var(--accent-math); }
+
+        .chart-container { position: relative; height: 250px; width: 100%; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #121212; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- Header -->
+    <div class="card header-section">
+        <!-- Setup View -->
+        <div id="setupControls">
+            <input type="number" id="daysGoalInput" class="days-input" value="110" placeholder="Days">
+            <button id="startBtn" onclick="startChallenge()">Start Tracker</button>
+        </div>
+        <!-- Active View -->
+        <div id="activeStats" class="header-stats hidden">
+            <div>
+                <div class="timer-label">Remaining</div>
+                <div class="timer-display" id="countdownDisplay">-- Days</div>
+            </div>
+            <div>
+                <div class="timer-label">Streak</div>
+                <div class="streak-display" id="streakDisplay">0</div>
+            </div>
+        </div>
+        <!-- Reset -->
+        <button onclick="resetApp()" class="reset-btn">Reset</button>
+    </div>
+
+    <!-- Summary Dashboard -->
+    <div class="card summary-dashboard">
+        <div class="summary-item">
+            <span class="summary-num text-total" id="dashTotal">0</span>
+            <span class="summary-tag">Total Left</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-num text-phy" id="dashPhy">0</span>
+            <span class="summary-tag">Physics</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-num text-chem" id="dashChem">0</span>
+            <span class="summary-tag">Chemistry</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-num text-math" id="dashMath">0</span>
+            <span class="summary-tag">Math</span>
+        </div>
+    </div>
+
+    <!-- Catch Up Alert (Crisis) -->
+    <div class="card crisis-card" id="crisisCard">
+        <div class="crisis-text">⚠ Behind Schedule</div>
+        <div class="crisis-sub" id="crisisText">You are X questions behind.</div>
+    </div>
+
+    <!-- Victory/Finished Card -->
+    <div class="card victory-card" id="victoryCard">
+        <div class="victory-text">🎉 Challenge Completed!</div>
+        <div class="victory-sub" id="victoryText"></div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="card input-section">
+        <div class="form-group">
+            <label>Subject</label>
+            <select id="subjectSelect" onchange="populateChapters()">
+                <option value="Physics">Physics</option>
+                <option value="Chemistry">Chemistry</option>
+                <option value="Math">Math</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Chapter</label>
+            <select id="chapterSelect"></select>
+        </div>
+        <div class="form-group">
+            <label>Questions</label>
+            <input type="number" id="qInput" class="main-input" min="1" placeholder="Quantity">
+        </div>
+        <button class="add-btn" onclick="addQuestions()">Add</button>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="card" style="grid-column: 1 / -1;">
+        <h3>Recent Activity</h3>
+        <div id="activityLog" class="log-container">
+            <div style="color: var(--text-sub); font-size: 0.9rem;">No recent activity.</div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+        <h3>Efficiency & Projection</h3>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <span class="stat-val" id="reqRate">0</span>
+                <span class="stat-lbl">Required (Q/Day)</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="realRate">0</span>
+                <span class="stat-lbl">Current Avg (Q/Day)</span>
+            </div>
+        </div>
+        
+        <div class="stat-box" style="margin-bottom: 20px;">
+            <span class="stat-val" id="projectedDate" style="font-size: 1.2rem; color: var(--text-main);">--</span>
+            <span class="stat-lbl">Projected Completion Date</span>
+        </div>
+
+        <h3>Progress</h3>
+        <div class="progress-wrapper">
+            <div class="progress-header"><span>Physics</span><span id="phyPerc">0%</span></div>
+            <div class="progress-track"><div class="progress-fill phy-fill" id="phyBar" style="width: 0%"></div></div>
+        </div>
+        <div class="progress-wrapper">
+            <div class="progress-header"><span>Chemistry</span><span id="chemPerc">0%</span></div>
+            <div class="progress-track"><div class="progress-fill chem-fill" id="chemBar" style="width: 0%"></div></div>
+        </div>
+        <div class="progress-wrapper">
+            <div class="progress-header"><span>Math</span><span id="mathPerc">0%</span></div>
+            <div class="progress-track"><div class="progress-fill math-fill" id="mathBar" style="width: 0%"></div></div>
+        </div>
+    </div>
+
+    <!-- Line Graph & Milestones -->
+    <div class="card">
+        <h3>Consistency</h3>
+        <div class="chart-container">
+            <canvas id="lineChart"></canvas>
+        </div>
+        
+        <h3 style="margin-top: 25px;">Milestones (Every 500 Qs)</h3>
+        <div id="badgeContainer" class="badge-container">
+            <!-- Badges injected here -->
+        </div>
+    </div>
+
+    <!-- Completed Chapters -->
+    <div class="card" style="grid-column: 1 / -1;">
+        <h3>Completed Chapters</h3>
+        <div id="completedContainer">
+            <!-- Segregated chapters go here -->
+        </div>
+    </div>
+
+    <!-- Bar Graph -->
+    <div class="card" style="grid-column: 1 / -1;">
+        <h3>Chapter Breakdown</h3>
+        <div class="chart-container" style="height: 400px;">
+            <canvas id="barChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Initial Data ---
+    const rawData = {
+        Physics: [
+            { name: "Kinematics", total: 301, done: 0 },
+            { name: "NLM", total: 252, done: 0 },
+            { name: "WPE", total: 261, done: 0 },
+            { name: "Rot. Motion", total: 436, done: 0 },
+            { name: "POM/COM", total: 504, done: 0 },
+            { name: "Thermo", total: 228, done: 0 },
+            { name: "KTG", total: 230, done: 0 },
+            { name: "Waves & Osc", total: 481, done: 0 }
+        ],
+        Chemistry: [
+            { name: "Thermo", total: 290, done: 0 },
+            { name: "Equilibrium", total: 364, done: 0 },
+            { name: "Redox", total: 58, done: 0 },
+            { name: "GOC", total: 290, done: 0 },
+            { name: "Hydrocarbons", total: 324, done: 0 }
+        ],
+        Math: [
+            { name: "Trig", total: 213, done: 0 },
+            { name: "Quad Eqn", total: 260, done: 0 },
+            { name: "St. Line", total: 237, done: 0 },
+            { name: "Circles", total: 285, done: 0 },
+            { name: "Ellipse/Hyp", total: 260, done: 0 },
+            { name: "Parabola", total: 86, done: 0 },
+            { name: "Binomial", total: 248, done: 0 },
+            { name: "PnC", total: 50, done: 0 },
+            { name: "Complex No", total: 269, done: 0 }
+        ]
+    };
+
+    let appState = {
+        data: JSON.parse(JSON.stringify(rawData)), 
+        startDate: null,
+        totalDays: 110,
+        dailyHistory: [], 
+        logs: [] 
+    };
+
+    let lineChartInstance = null;
+    let barChartInstance = null;
+    const COLORS = { Physics: '#e53935', Chemistry: '#ffb300', Math: '#1e88e5' };
+
+    // --- Core Functions ---
+
+    function init() {
+        const saved = localStorage.getItem('backlogTrackerV6');
+        if (saved) {
+            appState = JSON.parse(saved);
+            if (!appState.logs) appState.logs = [];
+        }
+
+        renderHeaderState();
+        populateChapters();
+        updateCountdown();
+        updateCharts();
+        updateStats();
+        renderLogs();
+        renderCompletedChapters();
+        renderBadges();
+        
+        setInterval(updateCountdown, 60000); 
+    }
+
+    function saveData() {
+        localStorage.setItem('backlogTrackerV6', JSON.stringify(appState));
+        updateStats();
+        updateCharts();
+        renderLogs();
+        renderCompletedChapters();
+        renderBadges();
+    }
+
+    function resetApp() {
+        if(confirm("Are you sure? This will delete all progress and cannot be undone.")) {
+            localStorage.removeItem('backlogTrackerV6');
+            location.reload();
+        }
+    }
+
+    function renderHeaderState() {
+        const setupDiv = document.getElementById('setupControls');
+        const activeDiv = document.getElementById('activeStats');
+        
+        if (appState.startDate) {
+            setupDiv.classList.add('hidden');
+            activeDiv.classList.remove('hidden');
+        } else {
+            setupDiv.classList.remove('hidden');
+            activeDiv.classList.add('hidden');
+        }
+    }
+
+    function startChallenge() {
+        const inputDays = parseInt(document.getElementById('daysGoalInput').value);
+        if(!inputDays || inputDays <= 0) {
+            alert("Please enter a valid number of days.");
+            return;
+        }
+
+        if(confirm(`Start the ${inputDays} Day Tracker now?`)) {
+            appState.startDate = new Date().toISOString();
+            appState.totalDays = inputDays;
+            renderHeaderState();
+            saveData();
+            updateCountdown();
+        }
+    }
+
+    function getTotalDone() {
+        let total = 0;
+        for (const subj in appState.data) {
+            appState.data[subj].forEach(c => total += c.done);
+        }
+        return total;
+    }
+
+    function getTotalQuestions() {
+        let total = 0;
+        for (const subj in appState.data) {
+            appState.data[subj].forEach(c => total += c.total);
+        }
+        return total;
+    }
+
+    function updateCountdown() {
+        const display = document.getElementById('countdownDisplay');
+        if (!appState.startDate) return;
+
+        // Check if finished first
+        const totalRem = getTotalQuestions() - getTotalDone();
+        if (totalRem === 0) {
+            display.innerText = "Completed";
+            display.style.color = "var(--success)";
+            return;
+        }
+
+        const start = new Date(appState.startDate);
+        const end = new Date(start);
+        end.setDate(start.getDate() + appState.totalDays);
+        
+        const now = new Date();
+        const diffDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 0) {
+            // Overshoot logic
+            display.innerText = `Overdue: ${Math.abs(diffDays)} Days`;
+            display.style.color = "var(--danger)";
+        } else {
+            // Normal Logic
+            display.innerText = `${diffDays} Days`;
+            display.style.color = "var(--text-main)";
+        }
+    }
+
+    function populateChapters() {
+        const subj = document.getElementById('subjectSelect').value;
+        const chapSelect = document.getElementById('chapterSelect');
+        const oldVal = chapSelect.value;
+        chapSelect.innerHTML = '';
+
+        appState.data[subj].forEach((chap, index) => {
+            const opt = document.createElement('option');
+            opt.value = index; 
+            const remaining = chap.total - chap.done;
+            opt.text = `${chap.name} (${remaining} left)`;
+            if(remaining === 0) opt.disabled = true;
+            chapSelect.add(opt);
+        });
+        if(oldVal) chapSelect.value = oldVal;
+    }
+
+    // --- Logic ---
+
+    function addQuestions() {
+        if (!appState.startDate) {
+            alert("Please set your goal and click 'Start Tracker' first.");
+            return;
+        }
+
+        const subj = document.getElementById('subjectSelect').value;
+        const chapIndex = parseInt(document.getElementById('chapterSelect').value);
+        const count = parseInt(document.getElementById('qInput').value);
+
+        if (!count || count <= 0) return;
+
+        const chapter = appState.data[subj][chapIndex];
+        if (chapter.done + count > chapter.total) {
+            alert(`Exceeds total! Only ${chapter.total - chapter.done} left.`);
+            return;
+        }
+
+        const oldTotal = getTotalDone();
+        chapter.done += count;
+        const newTotal = getTotalDone();
+        
+        if (Math.floor(newTotal / 250) > Math.floor(oldTotal / 250)) {
+            triggerConfetti();
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const dayEntry = appState.dailyHistory.find(d => d.date === today);
+        if (dayEntry) dayEntry.count += count;
+        else appState.dailyHistory.push({ date: today, count: count });
+
+        appState.logs.unshift({
+            id: Date.now(),
+            date: today,
+            subject: subj,
+            chapterIdx: chapIndex,
+            chapterName: chapter.name,
+            count: count
+        });
+
+        document.getElementById('qInput').value = '';
+        saveData();
+        populateChapters();
+    }
+
+    function undoLog(id) {
+        const logIndex = appState.logs.findIndex(l => l.id === id);
+        if (logIndex === -1) return;
+        const log = appState.logs[logIndex];
+        
+        if(!confirm(`Delete: ${log.count} Qs in ${log.chapterName}?`)) return;
+
+        const chapter = appState.data[log.subject][log.chapterIdx];
+        chapter.done -= log.count;
+        if(chapter.done < 0) chapter.done = 0;
+
+        const dayEntry = appState.dailyHistory.find(d => d.date === log.date);
+        if (dayEntry) {
+            dayEntry.count -= log.count;
+            if(dayEntry.count <= 0) appState.dailyHistory = appState.dailyHistory.filter(d => d.date !== log.date);
+        }
+
+        appState.logs.splice(logIndex, 1);
+        saveData();
+        populateChapters();
+    }
+
+    // --- Rendering ---
+
+    function triggerConfetti() {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    }
+
+    function renderBadges() {
+        const container = document.getElementById('badgeContainer');
+        const currentTotal = getTotalDone();
+        const maxTotal = getTotalQuestions(); 
+        let html = '';
+        
+        for(let m = 500; m <= maxTotal; m += 500) {
+            let label = m < 1000 ? m : (m / 1000) + 'k';
+            if (currentTotal >= m) {
+                html += `<div class="badge badge-earned">${label} Qs</div>`;
+            } else {
+                html += `<div class="badge" style="opacity:0.3">${label} Qs</div>`;
+            }
+        }
+        container.innerHTML = html;
+    }
+
+    function renderLogs() {
+        const container = document.getElementById('activityLog');
+        if (appState.logs.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-sub); font-size:0.9rem;">No recent activity.</div>';
+            return;
+        }
+        let html = '';
+        appState.logs.slice(0, 10).forEach(log => {
+            html += `
+                <div class="log-item">
+                    <div style="color:var(--text-sub)">
+                        <span style="color:${COLORS[log.subject]}; font-weight:bold;">${log.subject}</span> 
+                        - ${log.chapterName}
+                    </div>
+                    <div>
+                        <span class="log-val">+${log.count}</span>
+                        <button class="undo-btn" onclick="undoLog(${log.id})">Undo</button>
+                    </div>
+                </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function renderCompletedChapters() {
+        const container = document.getElementById('completedContainer');
+        container.innerHTML = '';
+        
+        const renderSubj = (subj, cssClass) => {
+            const completed = appState.data[subj].filter(c => c.done >= c.total);
+            if (completed.length > 0) {
+                let html = `<div class="comp-section"><div class="comp-header">${subj}</div><div class="comp-list">`;
+                completed.forEach(c => {
+                    html += `<div class="completed-chip ${cssClass}">${c.name}</div>`;
+                });
+                html += `</div></div>`;
+                container.innerHTML += html;
+            }
+        };
+
+        renderSubj('Physics', 'chip-phy');
+        renderSubj('Chemistry', 'chip-chem');
+        renderSubj('Math', 'chip-math');
+        
+        if (container.innerHTML === '') {
+            container.innerHTML = '<span style="color:var(--text-sub); font-size:0.8rem;">No chapters completed yet.</span>';
+        }
+    }
+
+    function updateStats() {
+        const totalQ = getTotalQuestions();
+        const totalDone = getTotalDone();
+        
+        const subStats = { Physics: {t:0, d:0}, Chemistry: {t:0, d:0}, Math: {t:0, d:0} };
+        for (const s in appState.data) {
+            appState.data[s].forEach(c => { subStats[s].t += c.total; subStats[s].d += c.done; });
+        }
+
+        // --- Summary Dashboard ---
+        const phyRem = subStats['Physics'].t - subStats['Physics'].d;
+        const chemRem = subStats['Chemistry'].t - subStats['Chemistry'].d;
+        const mathRem = subStats['Math'].t - subStats['Math'].d;
+        const totalRem = totalQ - totalDone;
+
+        document.getElementById('dashTotal').innerText = totalRem;
+        document.getElementById('dashPhy').innerText = phyRem;
+        document.getElementById('dashChem').innerText = chemRem;
+        document.getElementById('dashMath').innerText = mathRem;
+        // -------------------------
+
+        const setBar = (s, p) => {
+            const perc = subStats[s].t === 0 ? 0 : (subStats[s].d / subStats[s].t) * 100;
+            document.getElementById(`${p}Perc`).innerText = `${Math.round(perc)}%`;
+            document.getElementById(`${p}Bar`).style.width = `${perc}%`;
+        };
+        setBar('Physics', 'phy'); setBar('Chemistry', 'chem'); setBar('Math', 'math');
+
+        // Logic for Rates / Crisis / Finished
+        let daysPassed = 0;
+        if (appState.startDate) {
+            const diff = new Date() - new Date(appState.startDate);
+            daysPassed = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+        }
+        
+        const daysLeft = appState.totalDays - daysPassed + 1; 
+
+        const realRate = daysPassed > 0 ? (totalDone / daysPassed) : 0;
+        
+        // Handle "Finished" State
+        const crisisCard = document.getElementById('crisisCard');
+        const victoryCard = document.getElementById('victoryCard');
+
+        if (totalRem === 0 && appState.startDate) {
+            // FINISHED
+            crisisCard.style.display = 'none';
+            victoryCard.style.display = 'block';
+            
+            // Calc overshoot/early
+            const targetEndDate = new Date(appState.startDate);
+            targetEndDate.setDate(targetEndDate.getDate() + appState.totalDays);
+            const now = new Date();
+            const diffTime = now - targetEndDate;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 0) {
+                document.getElementById('victoryText').innerText = `You overshot by ${diffDays} days.`;
+            } else {
+                document.getElementById('victoryText').innerText = `You finished ${Math.abs(diffDays)} days early!`;
+            }
+
+            document.getElementById('reqRate').innerText = "0";
+            document.getElementById('projectedDate').innerText = "Done";
+
+        } else {
+            // NOT FINISHED
+            victoryCard.style.display = 'none';
+
+            let reqRate = 0;
+            if (daysLeft <= 0) {
+                document.getElementById('reqRate').innerText = "Overdue";
+            } else {
+                reqRate = (totalRem / daysLeft);
+                document.getElementById('reqRate').innerText = reqRate.toFixed(1);
+            }
+
+            // Crisis Calculation
+            const overallIdealRate = totalQ / appState.totalDays;
+            const expectedDone = overallIdealRate * daysPassed;
+            const backlogDebt = expectedDone - totalDone;
+
+            if (backlogDebt > 10 && appState.startDate) {
+                crisisCard.style.display = 'block';
+                const catchUpDays = 10;
+                const extraPerDay = Math.ceil(backlogDebt / catchUpDays);
+                document.getElementById('crisisText').innerHTML = 
+                    `You are <b>${Math.round(backlogDebt)}</b> Qs behind schedule.<br>Do <b>+${extraPerDay}</b> extra Qs/day for 10 days to catch up.`;
+            } else {
+                crisisCard.style.display = 'none';
+            }
+
+            // Projection
+            const projEl = document.getElementById('projectedDate');
+            if (realRate <= 0.1) projEl.innerText = "Unknown";
+            else {
+                const daysToFinish = Math.ceil(totalRem / realRate);
+                const d = new Date(); d.setDate(d.getDate() + daysToFinish);
+                projEl.innerText = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+        }
+
+        const realEl = document.getElementById('realRate');
+        realEl.innerText = realRate.toFixed(1);
+
+        calculateStreak();
+    }
+
+    function calculateStreak() {
+        if (!appState.dailyHistory.length) {
+            document.getElementById('streakDisplay').innerText = "0"; return;
+        }
+        const sorted = [...appState.dailyHistory].sort((a,b) => new Date(b.date) - new Date(a.date));
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        const yStr = yesterday.toISOString().split('T')[0];
+
+        let streak = 0;
+        const latest = sorted[0].date;
+        
+        if (latest === today || latest === yStr) {
+            let checkDate = new Date();
+            if (latest !== today) checkDate.setDate(checkDate.getDate() - 1);
+            
+            while (true) {
+                const dStr = checkDate.toISOString().split('T')[0];
+                const hasWork = appState.dailyHistory.find(d => d.date === dStr && d.count > 0);
+                if (hasWork) { streak++; checkDate.setDate(checkDate.getDate() - 1); } 
+                else break;
+            }
+        }
+        document.getElementById('streakDisplay').innerText = streak;
+    }
+
+    function updateCharts() {
+        const lineCtx = document.getElementById('lineChart').getContext('2d');
+        const sortedH = [...appState.dailyHistory].sort((a,b) => new Date(a.date) - new Date(b.date));
+        
+        // Calculate Moving Average (7 Days)
+        const rawCounts = sortedH.map(h => h.count);
+        const movingAvg = rawCounts.map((val, idx, arr) => {
+            const start = Math.max(0, idx - 6);
+            const subset = arr.slice(start, idx + 1);
+            const sum = subset.reduce((a, b) => a + b, 0);
+            return sum / subset.length;
+        });
+
+        if (lineChartInstance) lineChartInstance.destroy();
+        lineChartInstance = new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: sortedH.map(h => h.date.substring(5)),
+                datasets: [
+                    {
+                        label: 'Daily Qs',
+                        data: rawCounts,
+                        borderColor: '#e0e0e0', backgroundColor: 'rgba(255,255,255,0.05)',
+                        borderWidth: 2, tension: 0.3, fill: true, pointRadius: 3
+                    },
+                    {
+                        label: '7-Day Avg',
+                        data: movingAvg,
+                        borderColor: '#00bcd4', // Cyan
+                        borderWidth: 2, tension: 0.4, fill: false, pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: true, labels: { color: '#888', font: {size: 10} } } },
+                scales: { x: { grid: { display: false } }, y: { grid: { color: '#333' }, beginAtZero: true } }
+            }
+        });
+
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        let labels=[], doneD=[], leftD=[], bgC=[];
+
+        ['Physics', 'Chemistry', 'Math'].forEach(s => {
+            appState.data[s].forEach(c => {
+                labels.push(c.name); doneD.push(c.done); leftD.push(c.total - c.done);
+                bgC.push(COLORS[s]);
+            });
+        });
+
+        if (barChartInstance) barChartInstance.destroy();
+        barChartInstance = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Done', data: doneD, backgroundColor: bgC, stack: '0' },
+                    { label: 'Left', data: leftD, backgroundColor: '#2c2c2c', stack: '0' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { 
+                    x: { stacked: true, grid: { display: false }, ticks: { color: '#888', maxRotation: 90, minRotation: 90, font: {size: 10} } },
+                    y: { stacked: true, grid: { color: '#333' } }
+                }
+            }
+        });
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
